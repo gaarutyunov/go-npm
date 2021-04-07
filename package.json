@@ -1,6 +1,6 @@
 {
   "name": "@gaarutyunov/go-npm-fork",
-  "version": "0.1.11",
+  "version": "0.1.15",
   "description": "Distribute and install Go binaries via NPM",
   "main": "index.js",
   "bin": {
@@ -13,6 +13,7 @@
   "author": "Sanath Kumar Ramesh <dayanandasaraswati@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
+    "@octokit/endpoint": "^6.0.11",
     "mkdirp": "^0.5.1",
     "request": "^2.81.0",
     "tar": "^2.2.1"

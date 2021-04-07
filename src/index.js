@@ -9,7 +9,8 @@ const request = require('request'),
     mkdirp = require('mkdirp'),
     fs = require('fs'),
     exec = require('child_process').exec,
-    process = require('process');
+    process = require('process'),
+    octokit = require('@octokit/endpoint');
 
 // Mapping from Node's `process.arch` to Golang's `$GOARCH`
 const ARCH_MAPPING = {
@@ -88,9 +89,17 @@ function validateConfiguration(packageJson) {
         return "'url' property is required";
     }
 
-    // if (!packageJson.bin || typeof(packageJson.bin) !== "object") {
-    //     return "'bin' property of package.json must be defined and be an object";
-    // }
+    if (!packageJson.goBinary.owner) {
+        return "'owner' property is necessary";
+    }
+
+    if (!packageJson.goBinary.repo) {
+        return "'repo' property is necessary";
+    }
+
+    if (!packageJson.goBinary.assetName) {
+        return "'assetName' property is required";
+    }
 }
 
 function parsePackageJson() {
@@ -121,10 +130,12 @@ function parsePackageJson() {
     // We have validated the config. It exists in all its glory
     let binName = packageJson.goBinary.name;
     let binPath = packageJson.goBinary.path;
-    let url = packageJson.goBinary.url;
     let auth = packageJson.goBinary.auth;
-    let username = packageJson.goBinary.username;
+    let owner = packageJson.goBinary.owner;
+    let repo = packageJson.goBinary.repo;
+    let assetName = packageJson.goBinary.assetName;
     let version = packageJson.version;
+
     if (version[0] === 'v') version = version.substr(1);  // strip the 'v' if necessary v0.0.1 => 0.0.1
 
     // Binary name on Windows has .exe suffix
@@ -132,19 +143,19 @@ function parsePackageJson() {
         binName += ".exe"
     }
 
-    // Interpolate variables in URL, if necessary
-    url = url.replace(/{{arch}}/g, ARCH_MAPPING[process.arch]);
-    url = url.replace(/{{platform}}/g, PLATFORM_MAPPING[process.platform]);
-    url = url.replace(/{{version}}/g, version);
-    url = url.replace(/{{bin_name}}/g, binName);
+    assetName = assetName.replace(/{{arch}}/g, ARCH_MAPPING[process.arch]);
+    assetName = assetName.replace(/{{platform}}/g, PLATFORM_MAPPING[process.platform]);
+    assetName = assetName.replace(/{{version}}/g, version);
+    assetName = assetName.replace(/{{bin_name}}/g, binName);
 
     return {
         binName,
         binPath,
-        url,
         version,
         auth,
-        username
+        owner,
+        repo,
+        assetName
     }
 }
 
@@ -174,24 +185,66 @@ function install(callback) {
     untar.on('end', verifyAndPlaceBinary.bind(null, opts.binName, opts.binPath, callback));
 
     console.log("Downloading from URL: " + opts.url);
-    let req = request({uri: opts.url})
+
+    let req;
+    let token;
 
     if (opts.auth) {
-        const token = process.env['GITHUB_TOKEN'];
+        token = process.env['GITHUB_TOKEN'];
 
         if (!token || !opts.username) {
             console.error("Please provide username in options and GITHUB_TOKEN environment variable to authenticate");
             return
         }
-
-        req = req.auth(opts.username, token, true);
     }
 
-    req.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
-    req.on('response', function(res) {
-        if (res.statusCode !== 200) return callback("Error downloading binary. HTTP Status Code: " + res.statusCode);
+    const releasesOptions = octokit.endpoint("GET /repos/{owner}/{repo}/releases", {
+        headers: {
+            authorization: !!token ? `token ${token}` : undefined
+        },
+        owner: opts.owner,
+        repo: opts.repo
+    });
 
-        req.pipe(ungz).pipe(untar);
+    const releaseRequest = request(releasesOptions);
+
+    releaseRequest.on('error', callback.bind(null, "Error downloading from URL: " + releasesOptions.url));
+
+    releaseRequest.on('response', function (res) {
+        if (res.statusCode !== 200) return callback("Error requesting release info. HTTP Status Code: " + res.statusCode);
+
+        const tag = `v${opts.version}`;
+
+        const release = res.find(x => x.tag_name === tag);
+
+        if (!release) {
+            return callback(`Release with tag ${tag} not found`);
+        }
+
+        const asset = release.assets.find(x => x.name === opts.assetName);
+
+        if (!asset) {
+            return callback(`Asset with name ${opts.assetName} not found`);
+        }
+
+        const assetOptions = octokit.endpoint("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+            headers: {
+                authorization: !!token ? `token ${token}` : undefined,
+                Accept: "application/octet-stream"
+            },
+            owner: opts.owner,
+            repo: opts.repo,
+            asset_id: asset.id
+        });
+
+        const assetRequest = request(assetOptions);
+
+        assetRequest.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
+        assetRequest.on('response', function(res) {
+            if (res.statusCode !== 200) return callback("Error downloading binary. HTTP Status Code: " + res.statusCode);
+
+            req.pipe(ungz).pipe(untar);
+        });
     });
 }
 
