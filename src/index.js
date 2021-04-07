@@ -47,7 +47,9 @@ function getInstallationPath(callback) {
             dir = stdout.trim();
         }
 
-        mkdirp.sync(dir);
+        if (!dir) {
+            dir = path.join(process.cwd(), 'node_modules/.bin')
+        }
 
         callback(null, dir);
     });
@@ -69,7 +71,7 @@ function verifyAndPlaceBinary(binName, binPath, callback) {
 
 function validateConfiguration(packageJson) {
 
-    if (!packageJson.version) {
+    if (!packageJson.goBinary.version) {
         return "'version' property must be specified";
     }
 
@@ -83,10 +85,6 @@ function validateConfiguration(packageJson) {
 
     if (!packageJson.goBinary.path) {
         return "'path' property is necessary";
-    }
-
-    if (!packageJson.goBinary.url) {
-        return "'url' property is required";
     }
 
     if (!packageJson.goBinary.owner) {
@@ -134,7 +132,7 @@ function parsePackageJson() {
     let owner = packageJson.goBinary.owner;
     let repo = packageJson.goBinary.repo;
     let assetName = packageJson.goBinary.assetName;
-    let version = packageJson.version;
+    let version = packageJson.goBinary.version;
 
     if (version[0] === 'v') version = version.substr(1);  // strip the 'v' if necessary v0.0.1 => 0.0.1
 
@@ -192,7 +190,7 @@ function install(callback) {
     if (opts.auth) {
         token = process.env['GITHUB_TOKEN'];
 
-        if (!token || !opts.username) {
+        if (!token) {
             console.error("Please provide username in options and GITHUB_TOKEN environment variable to authenticate");
             return
         }
@@ -206,30 +204,36 @@ function install(callback) {
         repo: opts.repo
     });
 
-    const releaseRequest = request(releasesOptions);
+    const onReleaseResponse = (error, res, body) => {
+        if (error) {
+            return callback("Error downloading from URL: " + releasesOptions.url + " " + error)
+        }
 
-    releaseRequest.on('error', callback.bind(null, "Error downloading from URL: " + releasesOptions.url));
-
-    releaseRequest.on('response', function (res) {
         if (res.statusCode !== 200) return callback("Error requesting release info. HTTP Status Code: " + res.statusCode);
 
-        const tag = `v${opts.version}`;
+        let tag = 'v' + opts.version;
 
-        const release = res.find(x => x.tag_name === tag);
+        const responseBody = JSON.parse(body);
+
+        let release = responseBody.find(function (x) {
+            return x.tag_name === tag;
+        });
 
         if (!release) {
-            return callback(`Release with tag ${tag} not found`);
+            return callback('Release with tag ' + tag + ' not found');
         }
 
-        const asset = release.assets.find(x => x.name === opts.assetName);
+        let asset = release.assets.find(function (x) {
+            return x.name === opts.assetName;
+        });
 
         if (!asset) {
-            return callback(`Asset with name ${opts.assetName} not found`);
+            return callback('Asset with name ' + opts.assetName + ' not found');
         }
 
-        const assetOptions = octokit.endpoint("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+        let assetOptions = octokit.endpoint("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
             headers: {
-                authorization: !!token ? `token ${token}` : undefined,
+                authorization: !!token ? 'token ' + token : undefined,
                 Accept: "application/octet-stream"
             },
             owner: opts.owner,
@@ -237,15 +241,17 @@ function install(callback) {
             asset_id: asset.id
         });
 
-        const assetRequest = request(assetOptions);
+        let assetRequest = request(assetOptions);
 
         assetRequest.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
-        assetRequest.on('response', function(res) {
+        assetRequest.on('response', function (res) {
             if (res.statusCode !== 200) return callback("Error downloading binary. HTTP Status Code: " + res.statusCode);
 
-            req.pipe(ungz).pipe(untar);
+            assetRequest.pipe(ungz).pipe(untar);
         });
-    });
+    }
+
+    request(releasesOptions, onReleaseResponse);
 }
 
 function uninstall(callback) {
