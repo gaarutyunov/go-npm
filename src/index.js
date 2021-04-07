@@ -123,6 +123,7 @@ function parsePackageJson() {
     let binPath = packageJson.goBinary.path;
     let url = packageJson.goBinary.url;
     let auth = packageJson.goBinary.auth;
+    let username = packageJson.goBinary.username;
     let version = packageJson.version;
     if (version[0] === 'v') version = version.substr(1);  // strip the 'v' if necessary v0.0.1 => 0.0.1
 
@@ -142,7 +143,8 @@ function parsePackageJson() {
         binPath,
         url,
         version,
-        auth
+        auth,
+        username
     }
 }
 
@@ -177,12 +179,12 @@ function install(callback) {
     if (opts.auth) {
         const token = process.env['GITHUB_TOKEN'];
 
-        if (!token) {
-            console.error("GITHUB_TOKEN environment variable must be set when using authentication");
+        if (!token || !opts.username) {
+            console.error("Please provide username in options and GITHUB_TOKEN environment variable to authenticate");
             return
         }
 
-        req = req.auth(null, null, true, opts.auth);
+        req = req.auth(opts.username, token, true);
     }
 
     req.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
