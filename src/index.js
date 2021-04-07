@@ -121,6 +121,7 @@ function parsePackageJson() {
     let binName = packageJson.goBinary.name;
     let binPath = packageJson.goBinary.path;
     let url = packageJson.goBinary.url;
+    let token = packageJson.goBinary.token;
     let version = packageJson.version;
     if (version[0] === 'v') version = version.substr(1);  // strip the 'v' if necessary v0.0.1 => 0.0.1
 
@@ -136,10 +137,11 @@ function parsePackageJson() {
     url = url.replace(/{{bin_name}}/g, binName);
 
     return {
-        binName: binName,
-        binPath: binPath,
-        url: url,
-        version: version
+        binName,
+        binPath,
+        url,
+        version,
+        token
     }
 }
 
@@ -169,7 +171,12 @@ function install(callback) {
     untar.on('end', verifyAndPlaceBinary.bind(null, opts.binName, opts.binPath, callback));
 
     console.log("Downloading from URL: " + opts.url);
-    let req = request({uri: opts.url});
+    let req = request({uri: opts.url})
+
+    if (opts.token) {
+        req = req.auth(null, null, true, opts.token);
+    }
+
     req.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
     req.on('response', function(res) {
         if (res.statusCode !== 200) return callback("Error downloading binary. HTTP Status Code: " + res.statusCode);

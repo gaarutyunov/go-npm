@@ -1,6 +1,6 @@
 {
-  "name": "go-npm",
-  "version": "0.1.8",
+  "name": "@gaarutyunov/go-npm-fork",
+  "version": "0.1.9",
   "description": "Distribute and install Go binaries via NPM",
   "main": "index.js",
   "bin": {
