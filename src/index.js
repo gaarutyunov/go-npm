@@ -8,7 +8,8 @@ const request = require('request'),
     zlib = require('zlib'),
     mkdirp = require('mkdirp'),
     fs = require('fs'),
-    exec = require('child_process').exec;
+    exec = require('child_process').exec,
+    process = require('process');
 
 // Mapping from Node's `process.arch` to Golang's `$GOARCH`
 const ARCH_MAPPING = {
@@ -121,7 +122,7 @@ function parsePackageJson() {
     let binName = packageJson.goBinary.name;
     let binPath = packageJson.goBinary.path;
     let url = packageJson.goBinary.url;
-    let token = packageJson.goBinary.token;
+    let auth = packageJson.goBinary.auth;
     let version = packageJson.version;
     if (version[0] === 'v') version = version.substr(1);  // strip the 'v' if necessary v0.0.1 => 0.0.1
 
@@ -141,7 +142,7 @@ function parsePackageJson() {
         binPath,
         url,
         version,
-        token
+        auth
     }
 }
 
@@ -173,8 +174,15 @@ function install(callback) {
     console.log("Downloading from URL: " + opts.url);
     let req = request({uri: opts.url})
 
-    if (opts.token) {
-        req = req.auth(null, null, true, opts.token);
+    if (opts.auth) {
+        const token = process.env['GITHUB_TOKEN'];
+
+        if (!token) {
+            console.error("GITHUB_TOKEN environment variable must be set when using authentication");
+            return
+        }
+
+        req = req.auth(null, null, true, opts.auth);
     }
 
     req.on('error', callback.bind(null, "Error downloading from URL: " + opts.url));
