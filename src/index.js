@@ -16,7 +16,8 @@ const request = require('request'),
 const ARCH_MAPPING = {
     "ia32": "386",
     "x64": "amd64",
-    "arm": "arm"
+    "arm": "arm",
+    "arm64": "arm64"
 };
 
 // Mapping between Node's `process.platform` to Golang's 
@@ -181,8 +182,6 @@ function install(callback) {
     // First we will Un-GZip, then we will untar. So once untar is completed,
     // binary is downloaded into `binPath`. Verify the binary and call it good
     untar.on('end', verifyAndPlaceBinary.bind(null, opts.binName, opts.binPath, callback));
-
-    console.log("Downloading from URL: " + opts.url);
 
     let req;
     let token;

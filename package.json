@@ -1,6 +1,6 @@
 {
   "name": "@gaarutyunov/go-npm-fork",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Distribute and install Go binaries via NPM",
   "main": "index.js",
   "bin": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepublish": "node_modules/babel-cli/bin/babel.js src --out-dir bin --presets es2015"
+    "prepublishOnly": "node_modules/babel-cli/bin/babel.js src --out-dir bin --presets es2015"
   },
   "author": "Sanath Kumar Ramesh <dayanandasaraswati@gmail.com>",
   "license": "Apache-2.0",
